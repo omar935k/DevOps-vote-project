@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vote-app
+spec:
+  rules:
+    - host: voteapp-vote.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "vote-app.fullname" . }}
+                port:
+                  number: 80
+    - host: voteapp-result.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "vote-app.fullname" . }}-result
+                port:
+                  number: 80

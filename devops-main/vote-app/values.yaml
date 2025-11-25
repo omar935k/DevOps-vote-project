@@ -1,0 +1,55 @@
+replicaCount: 1
+
+image:
+  repository: vote
+  tag: latest
+
+vote:
+ image: vote
+ tag: latest
+ port: 80
+
+result:
+ image: result
+ tag: latest
+ port: 4000
+
+worker:
+ image: worker
+ tag: latest
+
+redis:
+ host: redis
+ port: 6379
+
+postgres:
+ host: db
+ port: 5432
+ user: postgres
+ password: postgres
+ db: votesdb
+
+service:
+  type: ClusterIP
+  port: 80
+
+httpRoute:
+  enabled: false
+
+
+ingress:
+  enabled: true
+  hosts:
+    - host: voteapp.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+
+
+autoscaling:
+  enabled: false
+
+serviceAccount:
+  create: false
+  name: ""

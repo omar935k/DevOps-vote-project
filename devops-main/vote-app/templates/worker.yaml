@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: dev
+  labels:
+    app: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+        - name: worker
+          image: worker:latest   # replace with your image if needed
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: vote-app-config
+            - secretRef:
+                name: vote-app-secret
+            
+            
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker
+  namespace: dev
+spec:
+  selector:
+    app: worker
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP
