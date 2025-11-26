@@ -1,0 +1,124 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  IMAGE_ORG: rma714479   # your Docker Hub username
+
+jobs:
+  build-and-scan:
+    name: Build → Test → Trivy → Push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU (for multi-arch buildx)
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # build vote
+      - name: Build vote image
+        run: |
+          docker build -t $IMAGE_ORG/vote:${{ github.sha }} -t $IMAGE_ORG/vote:latest ./vote
+
+      # build result
+      - name: Build result image
+        run: |
+          docker build -t $IMAGE_ORG/result:${{ github.sha }} -t $IMAGE_ORG/result:latest ./result
+
+      # build worker
+      - name: Build worker image
+        run: |
+          docker build -t $IMAGE_ORG/worker:${{ github.sha }} -t $IMAGE_ORG/worker:latest ./worker
+
+      # simple unit / smoke tests (optional — replace with real tests if exist)
+      - name: Smoke test (vote)
+        run: |
+          echo "No unit tests? Running simple file check"
+          test -f ./vote/Dockerfile
+
+      # Trivy scans
+      - name: Trivy scan vote
+        uses: aquasecurity/trivy-action@v0.9.0
+        with:
+          image-ref: ${{ env.IMAGE_ORG }}/vote:latest
+
+      - name: Trivy scan result
+        uses: aquasecurity/trivy-action@v0.9.0
+        with:
+          image-ref: ${{ env.IMAGE_ORG }}/result:latest
+
+      - name: Trivy scan worker
+        uses: aquasecurity/trivy-action@v0.9.0
+        with:
+          image-ref: ${{ env.IMAGE_ORG }}/worker:latest
+
+      # push images
+      - name: Push vote image
+        run: |
+          docker push $IMAGE_ORG/vote:latest
+          docker push $IMAGE_ORG/vote:${{ github.sha }}
+
+      - name: Push result image
+        run: |
+          docker push $IMAGE_ORG/result:latest
+          docker push $IMAGE_ORG/result:${{ github.sha }}
+
+      - name: Push worker image
+        run: |
+          docker push $IMAGE_ORG/worker:latest
+          docker push $IMAGE_ORG/worker:${{ github.sha }}
+
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: build-and-scan
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Restore kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG }}" > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      # Optional: Use helm to upgrade/install
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+
+      - name: Helm upgrade/install
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami || true
+          helm upgrade --install vote-app ./vote-app -n dev --create-namespace \
+            --set vote.image=rma714479/vote:latest \
+            --set result.image=rma714479/result:latest \
+            --set worker.image=rma714479/worker:latest
+        env:
+          KUBECONFIG: ${{ secrets.KUBECONFIG }}
+
+      - name: Wait for pods ready
+        run: |
+          kubectl rollout status deploy/vote-app-vote -n dev --timeout=120s
+          kubectl rollout status deploy/vote-app-result -n dev --timeout=120s
+          kubectl rollout status deploy/worker -n dev --timeout=120s
+        env:
+          KUBECONFIG: ${{ secrets.KUBECONFIG }}
