@@ -17,7 +17,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up QEMU
+      - name: Set up QEMU (for multi-arch buildx)
         uses: docker/setup-qemu-action@v2
 
       - name: Set up Docker Buildx
@@ -29,38 +29,44 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      # Build vote image
       - name: Build vote image
         run: |
           docker build -t $IMAGE_ORG/vote:${{ github.sha }} -t $IMAGE_ORG/vote:latest ./vote
 
+      # Build result image
       - name: Build result image
         run: |
           docker build -t $IMAGE_ORG/result:${{ github.sha }} -t $IMAGE_ORG/result:latest ./result
 
+      # Build worker image
       - name: Build worker image
         run: |
           docker build -t $IMAGE_ORG/worker:${{ github.sha }} -t $IMAGE_ORG/worker:latest ./worker
 
+      # Simple unit/smoke test
       - name: Smoke test (vote)
         run: |
-          echo "Running simple file check"
+          echo "No unit tests? Running simple file check"
           test -f ./vote/Dockerfile
 
+      # Trivy scans (fixed version)
       - name: Trivy scan vote
-        uses: aquasecurity/trivy-action@v0.13.3
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: ${{ env.IMAGE_ORG }}/vote:latest
 
       - name: Trivy scan result
-        uses: aquasecurity/trivy-action@v0.13.3
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: ${{ env.IMAGE_ORG }}/result:latest
 
       - name: Trivy scan worker
-        uses: aquasecurity/trivy-action@v0.13.3
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: ${{ env.IMAGE_ORG }}/worker:latest
 
+      # Push images
       - name: Push vote image
         run: |
           docker push $IMAGE_ORG/vote:latest
